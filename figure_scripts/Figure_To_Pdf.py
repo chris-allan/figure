@@ -172,7 +172,8 @@ def drawLabels(conn, c, panel, pageHeight, dpi):
             c.drawCentredString(lx, pageHeight - label_h - ly, label['text'])
         elif align == 'vertical':
             c.rotate(90)
-            c.drawCentredString(pageHeight - ly, -(lx + label_h), label['text'])
+            c.drawCentredString(pageHeight - ly, -(lx + label_h),
+                                label['text'])
             c.rotate(-90)
 
         return label_h
@@ -220,14 +221,16 @@ def drawLabels(conn, c, panel, pageHeight, dpi):
                 ly += label_h + spacer
         elif key == 'left':
             lx = x - spacer
-            total_h = sum([l['size'] for l in labels]) + spacer * (len(labels)-1)
+            sizes = [l['size'] for l in labels]
+            total_h = sum(sizes) + spacer * (len(labels)-1)
             ly = y + (height-total_h)/2
             for l in labels:
                 label_h = drawLab(c, l, lx, ly, align='right')
                 ly += label_h + spacer
         elif key == 'right':
             lx = x + width + spacer
-            total_h = sum([l['size'] for l in labels]) + spacer * (len(labels)-1)
+            sizes = [l['size'] for l in labels]
+            total_h = sum(sizes) + spacer * (len(labels)-1)
             ly = y + (height-total_h)/2
             for l in labels:
                 label_h = drawLab(c, l, lx, ly)
@@ -268,12 +271,14 @@ def drawScalebar(c, panel, region_width, pageHeight):
 
     def draw_sb(sb_x, sb_y, align='left'):
 
-        print "Adding Scalebar of %s microns. Pixel size is %s microns" % (sb['length'], panel['pixel_size_x'])
+        print "Adding Scalebar of %s microns." % sb['length'],
+        print "Pixel size is %s microns" % panel['pixel_size_x']
         pixels_length = sb['length'] / panel['pixel_size_x']
         scale_to_canvas = panel['width'] / region_width
         canvas_length = pixels_length * scale_to_canvas
         print 'Scalebar length (panel pixels):', pixels_length
-        print 'Scale by %s to page coordinate length: %s' % (scale_to_canvas, canvas_length)
+        print 'Scale by %s to page ' \
+              'coordinate length: %s' % (scale_to_canvas, canvas_length)
         sb_y = pageHeight - sb_y
         if align == 'left':
             c.line(sb_x, sb_y, sb_x + canvas_length, sb_y)
@@ -324,7 +329,9 @@ def drawPanel(conn, c, panel, pageHeight, idx):
     t = panel['theT']     # image._re.getDefaultT()
 
     # pilImg = image.renderImage(z, t)
-    imgData = image.renderJpegRegion(z, t, tile['x'], tile['y'], tile['width'], tile['height'], compression=1.0)
+    imgData = image.renderJpegRegion(
+        z, t, tile['x'], tile['y'],
+        tile['width'], tile['height'], compression=1.0)
     i = StringIO(imgData)
     pilImg = Image.open(i)
     tempName = str(idx) + ".jpg"
@@ -347,7 +354,7 @@ def getThumbnail(conn, imageId):
     return tempName
 
 
-def addInfoPage(conn, scriptParams, c, panels_json):
+def addInfoPage(conn, scriptParams, c, panels_json, dpi):
 
     base_url = None
     if 'Webclient_URI' in scriptParams:
@@ -365,13 +372,23 @@ def addInfoPage(conn, scriptParams, c, panels_json):
     story = []
     scalebars = []
 
-    story.append(Paragraph("Figure Images", styleH))
+    def scale_dpi(size):
+        # sizes are originally for 72 dpi
+        return size * dpi / 72
 
-    def addPara(lines):
+    fontSize = scale_dpi(10)
+    spaceBefore = scale_dpi(15)
+    spaceAfter = scale_dpi(15)
+    thumbSize = scale_dpi(25)
+
+    def addPara(lines, style=styleN):
         text = "<br />".join(lines)
-        attrs = "spaceBefore='15' spaceAfter='15'"
+        attrs = "spaceBefore='%s' spaceAfter='%s' " \
+            "fontSize='%s'" % (spaceBefore, spaceAfter, fontSize)
         para = "<para %s>%s</para>" % (attrs, text)
-        story.append(Paragraph(para, styleN))
+        story.append(Paragraph(para, style))
+
+    addPara(["Figure Images"], styleH)
 
     # Go through sorted panels, adding paragraph for each unique image
     for p in panels_json:
@@ -383,7 +400,8 @@ def addInfoPage(conn, scriptParams, c, panels_json):
             continue    # ignore images we've already handled
         imgIds.add(iid)
         thumbSrc = getThumbnail(conn, iid)
-        thumb = "<img src='%s' width='25' height='25' valign='middle' />" % thumbSrc
+        thumb = "<img src='%s' width='%s' height='%s' " \
+                "valign='middle' />" % (thumbSrc, thumbSize, thumbSize)
         line = [thumb]
         line.append(p['name'])
         img_url = "%s?show=image-%s" % (base_url, iid)
@@ -391,7 +409,7 @@ def addInfoPage(conn, scriptParams, c, panels_json):
         addPara([" ".join(line)])
 
     if len(scalebars) > 0:
-        story.append(Paragraph("Scalebars", styleH))
+        addPara(["Scalebars"], styleH)
         sbs = [str(s) for s in scalebars]
         addPara(["Scalebars: %s microns" % " microns, ".join(sbs)])
 
@@ -408,8 +426,9 @@ def create_pdf(conn, scriptParams):
     figure_json = json.loads(figure_json_string)
 
     n = datetime.now()
-    # time-stamp name by default: Figure_2013-10-29_22-43-53.pdf (tried : but they get replaced)
-    figureName = "Figure_%s-%s-%s_%s-%s-%s.pdf" % (n.year, n.month, n.day, n.hour, n.minute, n.second)
+    # time-stamp name by default: Figure_2013-10-29_22-43-53.pdf
+    figureName = "Figure_%s-%s-%s_%s-%s-%s." \
+        "pdf" % (n.year, n.month, n.day, n.hour, n.minute, n.second)
 
     # get Figure width & height...
     pageWidth = figure_json['paper_width']
@@ -444,7 +463,7 @@ def create_pdf(conn, scriptParams):
     c.showPage()
 
     if True:
-        addInfoPage(conn, scriptParams, c, panels_json)
+        addInfoPage(conn, scriptParams, c, panels_json, dpi)
 
     c.save()
 
@@ -464,26 +483,30 @@ def create_pdf(conn, scriptParams):
         links.append(link)
     print len(links)
     if len(links) > 0:
-        links = conn.getUpdateService().saveAndReturnArray(links, conn.SERVICE_OPTS)
+        links = conn.getUpdateService().saveAndReturnArray(
+            links, conn.SERVICE_OPTS)
 
     return fileAnn
 
 
 def runScript():
     """
-    The main entry point of the script, as called by the client via the scripting service, passing the required parameters.
+    The main entry point of the script, as called by the client
+    via the scripting service, passing the required parameters.
     """
 
     client = scripts.client(
-        'Figure_To_Pdf.py', """Used by web.figure to generate pdf figures from json data""",
+        'Figure_To_Pdf.py',
+        """Used by web.figure to generate pdf figures from json data""",
 
         scripts.String("Figure_JSON", optional=False,
                        description="All figure info as json stringified"),
 
         scripts.String("Webclient_URI", grouping="4",
-                       description="Base URL for adding links to images in webclient"),
+                       description="webclient URL for adding links to images"),
 
-        scripts.String("Figure_Name", grouping="4", description="Name of the Pdf Figure")
+        scripts.String("Figure_Name", grouping="4",
+                       description="Name of the Pdf Figure")
     )
 
     try:
@@ -499,7 +522,9 @@ def runScript():
         print scriptParams
 
         if not reportlabInstalled:
-            client.setOutput("Message", rstring("Need to install https://bitbucket.org/rptlab/reportlab"))
+            client.setOutput(
+                "Message",
+                rstring("Install https://bitbucket.org/rptlab/reportlab"))
         else:
             # call the main script - returns a file annotation wrapper
             fileAnnotation = create_pdf(conn, scriptParams)
@@ -507,7 +532,9 @@ def runScript():
             # return this fileAnnotation to the client.
             client.setOutput("Message", rstring("Pdf Figure created"))
             if fileAnnotation is not None:
-                client.setOutput("File_Annotation", robject(fileAnnotation._obj))
+                client.setOutput(
+                    "File_Annotation",
+                    robject(fileAnnotation._obj))
 
     finally:
         client.closeSession()
