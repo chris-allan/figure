@@ -414,11 +414,6 @@
                 // bring older files up-to-date
                 data = self.version_transform(data);
 
-                _.each(data.panels, function(p){
-                    p.selected = false;
-                    self.panels.create(p);
-                });
-
                 var name = data.figureName || "UN-NAMED";
 
                 self.set({'fileId': fileId,
@@ -430,6 +425,13 @@
                         'dpi': data.dpi,
                         'orientation': data.orientation,
                     });
+
+                _.each(data.panels, function(p){
+                    p.selected = false;
+                    self.panels.create(p);
+                });
+
+                self.set('unsaved', false);
                 self.trigger("reset_undo_redo");
             });
         },
@@ -1225,7 +1227,8 @@
 
         // Add a panel to the view
         addOne: function(panel) {
-            var view = new PanelView({model:panel});    // uiState:this.uiState
+            var dpi = this.model.get('dpi');
+            var view = new PanelView({model:panel, dpi:dpi});    // uiState:this.uiState
             this.$paper.append(view.render().el);
         },
 
@@ -1283,8 +1286,6 @@
                 paper_left = (canvas_w - paper_w)/2,
                 paper_top = (canvas_h - paper_h)/2;
 
-            console.log("FIGRE render");
-
             this.$paper.css({'width': paper_w, 'height': paper_h,
                     'left': paper_left, 'top': paper_top});
             $("#canvas").css({'width': this.model.get('canvas_width'),
@@ -1309,7 +1310,7 @@
         events: {
             "submit .paperSetupForm": "handlePaperSetup",
             "change .paperSizeSelect": "rerender",
-            "keyup #dpi": "rerender",
+            "keyup #dpi": "rerenderDb",
             "change input": "rerender",
         },
 
@@ -1319,6 +1320,8 @@
             $("#paperSetupModal").bind("show.bs.modal", function(){
                 self.render();
             });
+            // don't update while typing
+            this.rerenderDb = _.debounce(this.rerender, 1000);
         },
 
         processForm: function() {
@@ -1332,7 +1335,6 @@
                 custom_h = parseInt($("#paperHeight").val(), 10),
                 units = $('.wh_units:first', $form).text();
 
-            console.log( 'units', $.trim(units), "size", size, 'dpi', dpi);
             var w_mm, h_m, w_pixels, h_pixels;
             if (size == 'A4') {
                 w_mm = 210;
@@ -1342,7 +1344,6 @@
                 h_mm = 280;
             } else if ($.trim(units) == 'mm') {
                 // get dims from custom fields and units
-                console.log("MM");
                 w_mm = custom_w;
                 h_mm = custom_h;
             }
@@ -1378,8 +1379,8 @@
             event.preventDefault();
             var json = this.processForm();
 
-            console.log("SET", json);
             this.model.set(json);
+            $("#paperSetupModal").modal('hide');
         },
 
         rerender: function() {
@@ -1390,7 +1391,6 @@
         render: function(json) {
             json = json || this.model.toJSON();
 
-            console.log(json);
             // if we're not manually setting mm or pixels, disable
             json.wh_disabled = !(json.page_size == 'mm' || json.page_size == 'pixels');
             json.units = json.page_size == 'mm' ? 'mm' : 'pixels';
@@ -1819,6 +1819,7 @@
 
         initialize: function(opts) {
             // we render on Changes in the model OR selected shape etc.
+            this.dpi = opts.dpi;
             this.model.on('destroy', this.remove, this);
             this.listenTo(this.model,
                 'change:x change:y change:width change:height change:zoom change:dx change:dy',
@@ -1945,6 +1946,7 @@
                 sb_json.position = sb.position;
                 sb_json.color = sb.color;
                 sb_json.width = sb.pixels;  // TODO * scale
+                sb_json.height = Math.round(2 * this.dpi/72);
 
                 var sb_html = this.scalebar_template(sb_json);
                 this.$el.append(sb_html);
