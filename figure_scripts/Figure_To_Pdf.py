@@ -117,7 +117,7 @@ def get_time_label_text(deltaT, format):
     return text
 
 
-def drawLabels(conn, c, panel, pageHeight):
+def drawLabels(conn, c, panel, pageHeight, dpi):
 
     labels = panel['labels']
     x = panel['x']
@@ -125,7 +125,7 @@ def drawLabels(conn, c, panel, pageHeight):
     width = panel['width']
     height = panel['height']
 
-    spacer = 5
+    spacer = dpi * 5 / 72
 
     # group by 'position':
     positions = {'top': [], 'bottom': [], 'left': [],
@@ -414,6 +414,9 @@ def create_pdf(conn, scriptParams):
     # get Figure width & height...
     pageWidth = figure_json['paper_width']
     pageHeight = figure_json['paper_height']
+    dpi = 72
+    if 'dpi' in figure_json:
+        dpi = figure_json['dpi']
     # add to scriptParams for convenience
     scriptParams['Page_Width'] = pageWidth
     scriptParams['Page_Height'] = pageHeight
@@ -435,7 +438,7 @@ def create_pdf(conn, scriptParams):
         print "IMAGE", i, imageId
         imageIds.add(imageId)
         drawPanel(conn, c, panel, pageHeight, i)
-        drawLabels(conn, c, panel, pageHeight)
+        drawLabels(conn, c, panel, pageHeight, dpi)
 
     # complete page and save
     c.showPage()
